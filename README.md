@@ -3,6 +3,7 @@
 </p>
 
 [![MIT license](https://img.shields.io/badge/License-MIT-blue.svg)](https://github.com/rhuancaetano/Hawk/blob/master/LICENSE)
+![development on](https://img.shields.io/badge/development-on-brightgreen.svg)
 
 Hawk is an open source web application for app reviews classification.
 
