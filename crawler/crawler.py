@@ -1,12 +1,11 @@
 from selenium import webdriver
+from bs4 import BeautifulSoup 
 from tqdm import tqdm
 import pandas as pd
 import numpy as np
 import time
-
-EVINO = 'br.com.evino.android'
-VIVINO = 'vivino.web.app'
-WINE = 'br.com.wine.app'
+from secure_keys import DIR
+from secure_keys import MAGAZINELUIZA as PACKAGE
 
 def reduce_mem_usage(df, verbose=True):
     numerics = ['int16', 'int32', 'int64', 'float16', 'float32', 'float64']
@@ -41,60 +40,62 @@ class Crawler:
         self.package_name = None
         self.driver = None
         self.elements = None
-        self.comment_list = None
+        self.comment_list = []
 
-    def open_page(self, package_name):
-        # load url
-        self.driver = webdriver.Chrome('C:\\Users\\Don\\Desktop\\crawler\\chromedriver.exe')
+    def page_open(self, package_name):
+        chrome_options = webdriver.ChromeOptions()
+        prefs = {'profile.managed_default_content_settings.images': 2}
+        chrome_options.add_experimental_option("prefs", prefs)
+        chrome_options.add_argument('--headless')
+        chrome_options.add_argument('--log-level=3')
+
+        self.driver = webdriver.Chrome(DIR, options=chrome_options)
         self.package_name = package_name
         self.driver.get('https://play.google.com/store/apps/details?id={}&showAllReviews=true'.format(package_name))
-        self.lang = self.driver.find_element_by_tag_name('html').get_attribute('lang')
-        print(self.lang)
 
-    def close_page(self):
-        self.driver.close()
+    def page_close(self):
+        self.driver.quit()
 
-    def load_page(self):
-        SCROLL_PAUSE_TIME = 2
+    def page_load(self):
+        SCROLL_PAUSE_TIME = 1.5
 
-        last_height = self.driver.execute_script('return document.body.scrollHeight')
         while True:
-            # if find a button to load more data then click
-            if self.driver.find_elements_by_class_name('CwaK9'):
-                time.sleep(SCROLL_PAUSE_TIME)
-                self.driver.find_element_by_class_name('CwaK9').click()
-                time.sleep(SCROLL_PAUSE_TIME)
-            else:
-                self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
-                time.sleep(SCROLL_PAUSE_TIME)
-                new_height = self.driver.execute_script('return document.body.scrollHeight')
-                
-                if new_height == last_height:
-                    break
-                last_height = new_height
-    
-        time.sleep(SCROLL_PAUSE_TIME*2)
-        self.elements = self.driver.find_elements_by_class_name('d15Mdf')
-    
-    def load_data(self):
-        self.comment_list = []
-        for element in tqdm(self.elements):
-            name = element.find_element_by_class_name('X43Kjb').text 
-            date = element.find_element_by_class_name('p2TkOb').text
-            rating = element.find_element_by_css_selector('div[class="pf5lIe"]>div').get_attribute('aria-label')
+            self.elements = self.driver.find_elements_by_class_name('d15Mdf')
+            if(self.elements == []):
+                break
+            self.load_data()
+            elements_drop = self.driver.find_elements_by_css_selector('div[jscontroller="H6eOGe"]')
+            for e in elements_drop:
+                self.driver.execute_script("arguments[0].remove()",e)
+            
+            time.sleep(SCROLL_PAUSE_TIME)
+            self.driver.execute_script('window.scrollTo(0, document.body.scrollHeight);')
+            self.driver.execute_script('window.scrollTo(0, 0);')
 
-            big_review = element.find_element_by_css_selector('span[jsname="fbQN7e"]').get_attribute('textContent')
+            if self.driver.find_elements_by_class_name('CwaK9') != []:
+                self.driver.find_element_by_class_name('CwaK9').click()
+            time.sleep(SCROLL_PAUSE_TIME)
+        
+    def load_data(self):
+        for element in tqdm(self.elements):
+            soup = BeautifulSoup(element.get_attribute('outerHTML'), 'html.parser')
+
+            name = soup.select('span.X43Kjb')[0].get_text()
+            date = soup.select('span.p2TkOb')[0].get_text()
+            rating = soup.select('div.pf5lIe > div')[0]['aria-label']
+
+            big_review = soup.select('span[jsname="fbQN7e"]')[0].get_text()
             if(big_review == ''):
-                review = element.find_element_by_css_selector('span[jsname="bN97Pc"]').get_attribute('textContent')
+                review = soup.select('span[jsname="bN97Pc"]')[0].get_text()
             else:
                 review = big_review
             self.comment_list.append([name,date,rating,review])
+        print(f'list size {len(self.comment_list)}')
 
     def run_crawler(self, URL):
-        self.open_page(URL)
-        self.load_page()
-        self.load_data()
-        self.close_page()
+        self.page_open(URL)
+        self.page_load()
+        self.page_close()
 
     def get_comments(self):
         return self.comment_list
@@ -118,6 +119,9 @@ class Crawler:
         return reduce_mem_usage(df[['name', 'date', 'rating', 'review']].copy())
 
 crw = Crawler()
-crw.run_crawler(EVINO)
+crw.run_crawler(PACKAGE)
 df = crw.to_pandas()
-df.to_pickle('./{}.pkl'.format(crw.package_name))
+df.to_pickle(f'./pickle_files/{crw.package_name}.pkl')
+
+
+
