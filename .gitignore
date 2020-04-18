@@ -3,8 +3,11 @@
 __pycache__/
 *.pyc
 
+pickle_files/
+*.pkl
+
 Dockerfile
 old.py
 debug.log
 chromedriver.exe
-*.pkl
+secure_keys.py
